@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alagoas - Visualição Computacional</title>
+    <link rel="stylesheet" href="./leaflet/leaflet.css" />
+    <script src="./leaflet/leaflet.js"></script>
+    <script src="./PapaParse-5.0.2/papaparse.js"></script>
+    <style>
+        #map {
+            height: 700px;
+        }
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255,255,255,0.8);
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 5px;
+        }
+        .info h4 {
+            margin: 0 0 5px;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        var geojson;
+        
+        var map = L.map('map').setView([-9.571306, -36.781950], 9);
+        var tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+
+        loadGeoJson();
+
+        async function loadGeoJson() {
+            try {
+                fetch('caracteristicas-muncipais_novo.csv')
+                    .then(response => response.text())
+                    .then(async csv => {
+                        const dados = Papa.parse(csv, { header: true, dynamicTyping: true });
+                        // console.log(dados.data);
+                        for (var i = 0; i<dados.data.length; i++) {
+                            // console.log(dados.data[0]);
+                            const request = await fetch("https://servicodados.ibge.gov.br/api/v3/malhas/municipios/"+dados.data[i].CÓDIGO+"?formato=application/vnd.geo+json")
+                            const response = await request.json();
+                            response.features[0].properties['nome'] = dados.data[i].MUNICÍPIOS;
+                            response.features[0].properties['ano_instalacao'] = dados.data[i].ANO_DE_INSTALAÇÃO;
+                            response.features[0].properties['clima'] = dados.data[i].CLIMA;
+                            response.features[0].properties['temperatura_max'] = dados.data[i].Temperatua_Máxima;
+                            response.features[0].properties['temperatura_min'] = dados.data[i].Temperatura_Mínima;
+                            // console.log(response.features[0].properties);
+                            geojson = L.geoJson(response, {style: estilo, onEachFeature: onEachFeature}).addTo(map); }
+                    });
+            } catch (error) {
+                console.log(error);
+            }
+        }
+
+        function getColor(d) {
+            return d >= 29 ? '#800026' :
+                d >= 26  ? '#BD0026' :
+                d >= 25  ? '#E31A1C' :
+                d >= 23  ? '#FC4E2A' :
+                d >= 20   ? '#FD8D3C' :
+                d >= 19   ? '#FEB24C' :
+                d >= 16   ? '#FED976' :
+                            '#FFEDA0';
+        }
+
+        function estilo(feature) {
+            console.log(feature.properties)
+            return {
+                fillColor: getColor(feature.properties.temperatura_min.substring(0, 2)),
+                weight: 2,
+                opacity: 1,
+                color: 'black',
+                dashArray: '3',
+                fillOpacity: 0.7
+            };
+        }
+
+        function highlightFeature(e) {
+            var layer = e.target;
+
+            layer.setStyle({
+                weight: 5,
+                color: 'white',
+                dashArray: '',
+                fillOpacity: 0.7
+            });
+
+            layer.bringToFront();
+            // console.log(layer.feature.properties)
+            info.update(layer.feature.properties);
+        }
+
+        function resetHighlight(e) {
+            geojson.resetStyle(e.target);
+            info.update();
+        }
+
+        function onEachFeature(feature, layer) {
+            layer.on({
+                mouseover: highlightFeature,
+                mouseout: resetHighlight
+            });
+        }
+
+        var info = L.control();
+
+        info.onAdd = function (map) {
+            this._div = L.DomUtil.create('div', 'info'); // create a div with a class "info"
+            this.update();
+            return this._div;
+        };
+
+        // method that we will use to update the control based on feature properties passed
+        info.update = function (props) {
+            this._div.innerHTML = '<h4>Informacoes</h4>' +  (props ?
+                '<b>Cidade: ' + props.nome + '(' + props.ano_instalacao + ')' + '</b><br />' + '<b>Tipo de Clima: </b>' + props.clima +
+                '<br />' +
+                '<b>Temperatura Maxima:</b> ' + props.temperatura_max  + '</b><br />' + '<b>Temperatura Minima: </b>' + props.temperatura_min
+                : 'Coloque o Mouse sobre a Cidade desejada!');
+        };
+
+        info.addTo(map);
+
+        
+    </script>
+</body>
+</html>
